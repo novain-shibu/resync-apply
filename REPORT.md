@@ -1,6 +1,6 @@
 # Resync-and-Anchor Copy Drafting for Lossless Code Fast-Apply
 
-**Novain Shibu** (independent) · October 2026 · Technical report · Code and data: `resync-apply` (Apache-2.0) · DOI: *pending*
+**Novain Shibu** (independent) · October 2026 · Technical report · Code and data: `resync-apply` (Apache-2.0) · DOI: [10.5281/zenodo.23393220](https://doi.org/10.5281/zenodo.23393220)
 
 ---
 

@@ -1,5 +1,7 @@
 # resync-apply
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23393220.svg)](https://doi.org/10.5281/zenodo.23393220)
+
 A lossless copy drafter for code "fast apply" (a model rewrites a whole file after an edit), plus a laptop simulator
 that scores any drafter with the exact pass count of a real GPU run, in seconds.
 
@@ -49,6 +51,6 @@ bit-identical output (rare fp16 near-ties exist for every method).
 
 ## Cite
 
-Novain Shibu (2026). Resync-and-Anchor Copy Drafting for Lossless Code Fast-Apply. Zenodo. DOI: <pending>
+Novain Shibu (2026). Resync-and-Anchor Copy Drafting for Lossless Code Fast-Apply. Zenodo. https://doi.org/10.5281/zenodo.23393220 (all versions: https://doi.org/10.5281/zenodo.23393219)
 
 AI assistance: research code and text were produced with Claude (Anthropic) under the author's direction.

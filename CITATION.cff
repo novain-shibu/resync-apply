@@ -6,6 +6,8 @@ authors:
   - family-names: Shibu
     given-names: Novain
 license: Apache-2.0
-date-released: 2026-10-16
+doi: 10.5281/zenodo.23393220
+repository-code: https://github.com/novain-shibu/resync-apply
+date-released: 2026-10-15
 version: "1.0.0"
 keywords: [speculative decoding, code editing, fast apply, LLM inference]
