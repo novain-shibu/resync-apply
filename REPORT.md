@@ -16,10 +16,11 @@ ranked by distance, read frontiers, and branch lengths taken from a learned tabl
 We tested it on 199 real edits from the Kortix FastApply dataset with the open Kortix/FastApply-1.5B model. It needs
 **~1.27x fewer verification passes than tuned SuffixDecoding**, the strongest open method and the one built into vLLM.
 On the 169 edits never used for tuning the ratio is **1.26–1.28x (bootstrap 95% CI 1.19–1.36)**. On a free NVIDIA T4
-in a Hugging Face Python loop this becomes only **1.05x lower wall-clock** (56.8 s vs 59.9 s on 30 edits). Over the
-first 5 edits it is about **37x faster than normal decoding**. Output matched greedy decoding on every edit compared
+in a Hugging Face Python loop the pass reduction did **not** turn into a clear speed-up: 1.05x lower wall-clock on
+the 30 tuning edits (56.8 s vs 59.9 s) and **1.00x on 29 held-out edits** (56.7 s vs 56.7 s, despite 1.37x fewer
+passes). Both methods are **24–37x faster than normal decoding** (first 5 edits of each run). Output matched greedy decoding on every edit compared
 (Section 6.4). We also report seven ideas that did not work, a loss breakdown against a copy oracle, and a laptop
-simulator that reproduces GPU pass counts exactly (664 = 664 and 644 = 644 on the two GPU-tested configurations).
+simulator that reproduces our GPU pass counts exactly (664, 644 and 603 passes in three GPU runs).
 
 ## 1. Introduction
 
@@ -31,7 +32,8 @@ Inference; a suffix tree over the prompt and earlier outputs, with adaptive draf
 
 When the model's output stops matching the current copy position, a copy drafter must find where to copy from
 next. Every wrong guess costs one full forward pass. This report measures that cost and shows that a small set of
-cheap, rule-based candidates removes about a fifth of all passes compared with tuned SuffixDecoding. The contributions:
+cheap, rule-based candidates removes about a fifth of all passes compared with tuned SuffixDecoding, and why that
+did not become a wall-clock gain on a T4. The contributions:
 
 1. A multi-branch copy drafter with resync candidates and 1-token anchors, evaluated against tuned SuffixDecoding on
    a real fast-apply model and dataset, including a held-out split.
@@ -79,7 +81,7 @@ The drafter (`sim/drafter.py`) is one Python class. The CPU simulator and the GP
 
 1. **Index.** The prompt (original file + edit snippet) is indexed by n-grams for n = 32, 16, 12, 8, 6, 4, 3, 2, 1.
 2. **Main branch.** Continue copying at the current pointer. The draft length doubles after a fully accepted pass
-   and shrinks to `2·accepted + 16` after a miss (bounded by kmin/kmax).
+   and shrinks to 2 × (accepted tokens) + 16 after a miss (bounded by kmin/kmax).
 3. **Resync candidates (after a mismatch).** If the model emitted token *t* where the source had *s[p]*, propose
    copying from *p+1* (substitution), *p* (insertion: the model added *t*) and *p+2* (deletion). If *s[p+1] = t*,
    the deletion branch is tried first.
@@ -108,13 +110,13 @@ The drafter (`sim/drafter.py`) is one Python class. The CPU simulator and the GP
   therefore be computed on a CPU from the recorded outputs (`traces/oracle.json`; produced with greedy verification
   and equal to plain `generate` on the 10 edits checked). Simulated SuffixDecoding passes
   equal the real GPU count (868 on the first 30 edits). Our drafters give 664 simulated = 664 on GPU, and
-  644 simulated = 644 on GPU for the final configuration.
+  644 = 644 (tuning edits) and 603 = 603 (held-out edits) for the final configuration.
   Wall-clock is predicted from the measured cost curve plus the 22 ms loop and 16 ms tree costs. The tree run was
   predicted at 69.5 s and measured at 70.5 s.
 - **Splits.** The first 30 edits have GPU wall-clock for every method and were used for tuning. Edits 30–198 were
   never used for tuning. The sizing table was trained on 100–198, so the strictly clean held-out subset for the
-  learned variant is 30–99. The held-out numbers below use the untuned and the time-tuned *rule* configurations,
-  which use no table.
+  learned variant is 30–99. The untuned and time-tuned *rule* configurations use no table, so 30–198 is held out
+  for them.
 - **Hardware:** one free Kaggle NVIDIA T4 (16 GB).
 
 ## 6. Results
@@ -127,9 +129,12 @@ The drafter (`sim/drafter.py`) is one Python class. The CPU simulator and the GP
 | untuned | **held-out 30–198** | **3,314** | 4,170 (**1.26x**) | 4,105 (1.24x) |
 | time-tuned (K=8, s32, w8, kmin 64, kmax 384) | **held-out 30–198** | **3,253** | 4,170 (**1.28x**) | 4,105 (1.26x) |
 | both | all 199 | 3,915–3,978 | 5,038 (1.27–1.29x) | 4,948 (1.24–1.26x) |
+| learned sizing + hybrid (final) | first 30 (tuning set) | 644 | 868 (1.35x) | 843 (1.31x) |
+| learned sizing + hybrid (final) | **held-out 30–99** | **1,370** | 1,774 (**1.29x**) | 1,763 (1.29x) |
 
 Bootstrap 95% confidence intervals for the held-out ratio vs SuffixDecoding linear: **1.19–1.33** (untuned) and
-**1.21–1.36** (time-tuned). On the first 30 edits the per-edit result was 14 wins, 11 losses and 5 ties (bootstrap CI of
+**1.21–1.36** (time-tuned), and **1.22–1.37** for the final configuration on 30–99 (its table was trained on 100–198,
+so 30–99 is its only clean split). On the first 30 edits the per-edit result was 14 wins, 11 losses and 5 ties (bootstrap CI of
 the ratio 1.14–1.47). The gain is concentrated in a few large files.
 
 ### 6.2 Ablation (passes; first 30 / all 199)
@@ -137,15 +142,16 @@ the ratio 1.14–1.47). The gain is concentrated in a few large files.
 | Drafter | first 30 | all 199 |
 |---|---|---|
 | single pointer, n-gram re-anchor | 979 | 5,708 |
-| + resync candidates | 852 | – |
-| + K=4 short side branches | 794 | – |
+| + resync candidates | 852 | 5,144 |
+| + K=4 side branches (32 tokens) | 794 | 4,785 |
 | + 1-token anchors, K=8 | 689 | 4,175 |
 | + read frontiers | 680 | 4,138 |
 | + strength-weighted branch lengths | **664** | **3,978** |
 | + learned sizing + hybrid (GPU run) | 644 | – |
 | SuffixDecoding linear / tree (reference) | 868 / 843 | 5,038 / 4,948 |
 
-Resync gives the largest single step (979 → 852, −13%). 1-token anchors give the second largest (794 → 689).
+Resync gives the largest single step on the first 30 (979 → 852, −13%; all 199: 5,708 → 5,144, −10%). 1-token
+anchors give the second largest (794 → 689; all 199: 4,785 → 4,175). Rows 1–5: `sim/ablation.py`.
 
 ### 6.3 Wall-clock (T4, 30 edits, Hugging Face loop)
 
@@ -159,18 +165,37 @@ Each row's ratio is against SuffixDecoding measured in the same job (59.9–66.5
 | Learned sizing + hybrid + cascade attention | 644 | 61.3 s | 30/30 | 0.98x |
 | SuffixDecoding (tuned) | 869 | 59.9 s | 30/30 | 1.00x |
 
+SuffixDecoding takes 869 passes here but 868 in the simulator and in the first GPU run. The GPU timing jobs send
+one warm-up request into SuffixDecoding's shared cache before the 30 edits, which slightly changes its contents. The
+outputs were identical, so the one-pass difference comes from cache state, not from the model.
+
 "Identical" = equal to plain `generate` on edits 1–5 and to the other methods' output on edits 6–30 (Section 6.4).
 
+**Held-out wall-clock run.** We then ran the final configuration against SuffixDecoding on dataset rows 30–59, which
+were never used for tuning (29 edits; one over-long row is skipped by the same rule as in every run):
+
+| Method (held-out rows 30–59) | Passes | Time | Identical | vs SuffixDecoding |
+|---|---|---|---|---|
+| **Learned sizing + hybrid** | **603** | **56.7 s** | **29/29** | **1.00x** |
+| SuffixDecoding (tuned) | 824 | 56.7 s | 29/29 | 1.00x |
+
+Passes stay 1.37x lower, but wall-clock is a tie. Our tree passes cost more than SuffixDecoding's linear passes
+(Section 3 and Section 9), and on this hardware and loop that cancels the saved passes. The simulator predicted our
+603 passes exactly. SuffixDecoding's simulated count for the same edits is 816 (its cache there already holds
+edits 0–29), against 824 on the GPU (empty cache plus warm-up).
+
 Normal greedy decoding of the first 5 edits (6,914 tokens) took 342.8 s. On the same 5 edits our method took 9.2 s
-(**37x**) and SuffixDecoding 9.9 s (35x). An earlier run on the first 10 edits measured 20.8x for our older
-single-branch drafter and 23.3x for SuffixDecoding. On a T4 in this loop, the 1.35x pass advantage becomes a 1.05x
-time advantage, because tree passes cost more (Section 3).
+(**37x**) and SuffixDecoding 9.9 s (35x). On the first 5 held-out edits (3,828 tokens) normal decoding took 158.9 s,
+and both methods took 6.5 s (**24x**). An earlier run on the first 10 edits measured 20.8x for our older
+single-branch drafter and 23.3x for SuffixDecoding. **On a T4 in this loop, a 1.35–1.37x pass advantage becomes a
+1.00–1.05x time advantage**, because tree passes cost more (Section 3).
 
 ### 6.4 Output equality
 
 All methods use greedy verification and so should reproduce greedy decoding. Two checks were made. The output was
-compared with plain `generate` on 10 edits (oracle run, 10/10 equal) and on 5 edits (race run, 5/5 equal). On
-edits 6–30 of the race all three methods produced identical outputs. We therefore say "matched greedy on every edit
+compared with plain `generate` on 10 edits (oracle run, 10/10 equal), 5 edits (race run, 5/5) and 5 held-out edits
+(held-out run, 5/5). On the remaining edits of each timing run all methods produced identical outputs (30/30 and
+29/29). We therefore say "matched greedy on every edit
 compared", not "bit-identical". Rare fp16 near-ties can flip an argmax for any method that changes the batch shape.
 In earlier runs with another model and dataset (Qwen2.5-Coder-1.5B-Instruct on 48 CanItEdit items), 1–2 items
 differed from plain `generate` for every method, prompt lookup and SuffixDecoding included.
@@ -195,6 +220,7 @@ the others use the traces or GPU runs.
 
 **Copy oracle.** An oracle that always copies the longest matching span (it knows the future output) needs 374
 passes on the first 30 edits (2,118 on all 199), against our 638–664. We classified our passes:
+
 - 249 were as good as the oracle;
 - 161 were genuinely new text;
 - 191 had the right position among the branches, but the branch was too short;
@@ -215,20 +241,23 @@ These numbers only show which way the result should move. Measuring them is futu
 ## 9. Limitations
 
 - One model (1.5B), one dataset, one GPU type, batch size 1, greedy decoding only.
-- The final configuration verifies 2.3 drafted tokens per output token (137 per pass; we did not log the same figure
-  for SuffixDecoding). Under heavy batching the GPU is no longer flat in drafted tokens, and the gain may shrink or
-  reverse.
+- **No wall-clock gain on held-out edits on a T4** (1.00x). The 1.05x on the tuning edits should be read as noise-level.
+- The final configuration verifies 2.3 drafted tokens per output token (137 per pass). SuffixDecoding verifies
+  1.48 (67 per pass; linear and tree modes alike), so we check ~1.6x more tokens per output token. Under heavy
+  batching the GPU is no longer flat in drafted tokens, and the gain may shrink or reverse.
 - Wall-clock was measured in a Hugging Face Python loop, not in vLLM or SGLang.
-- Settings were tuned on the first 30 edits. Held-out results are given, but the GPU wall-clock run uses those same
-  30 edits.
+- Settings were tuned on the first 30 edits. Pass counts and wall-clock were re-checked on held-out edits
+  (Sections 6.1 and 6.3).
 - Output equality is shown on the edits compared (Section 6.4), not proven.
 
 ## 10. Reproducibility
 
 - `python reproduce.py` (laptop, ~1 minute, no GPU) prints 3,978 / 664 passes for the drafter, 2,118 / 374 for the
-  copy oracle, and 644 for the configuration of the GPU wall-clock run. `python sim/hybrid.py` predicts T4 wall-clock from the measured curve.
+  copy oracle, and 644 for the configuration of the GPU wall-clock run. `python sim/heldout_split.py` prints every
+  split with bootstrap intervals, using SuffixDecoding's per-edit counts in `traces/suffix_per_record.json`. `python sim/hybrid.py` predicts T4 wall-clock from the measured curve.
 - `traces/oracle.json`: 199 tokenized prompts, the model's outputs, the original GPU timings and the cost curve.
-- `kaggle/`: the scripts behind every GPU number (`oracle_run.py`, `gpu_race.py`, `heldout_suffix.py`). About 10–12 GPU
+- `kaggle/`: the scripts behind every GPU number (`oracle_run.py`, `gpu_race.py`, `gpu_heldout.py`) and the
+  SuffixDecoding pass counts (`heldout_suffix.py`, `heldout_suffix2.py`). About 10–12 GPU
   hours of free Kaggle quota were used in total.
 
 ## Acknowledgements and AI-assistance statement
@@ -243,14 +272,14 @@ open-sourcing Arctic Inference.
 1. Yang et al. *Inference with Reference: Lossless Acceleration of Large Language Models* (LLMA). arXiv:2304.04487, 2023.
 2. Saxena. *Prompt Lookup Decoding*. GitHub, 2023.
 3. Oliaro et al. *SuffixDecoding: Extreme Speculative Decoding for Emerging AI Applications*. arXiv:2411.04975; Snowflake Arctic Inference.
-4. *EfficientEdit: Accelerating Code Editing via Edit-Oriented Speculative Decoding*. ASE 2025, arXiv:2506.02780.
+4. Wang et al. *EfficientEdit: Accelerating Code Editing via Edit-Oriented Speculative Decoding*. ASE 2025, arXiv:2506.02780.
 5. Hu et al. *SAM Decoding: Speculative Decoding via Suffix Automaton*. ACL 2025, arXiv:2411.10666.
-6. *Draft Less, Retrieve More: Hybrid Tree Construction for Speculative Decoding* (Graft). arXiv:2605.20104, 2026.
+6. Shen et al. *Draft Less, Retrieve More: Hybrid Tree Construction for Speculative Decoding* (Graft). arXiv:2605.20104, 2026.
 7. He et al. *REST: Retrieval-Based Speculative Decoding*. NAACL 2024.
 8. Miao et al. *SpecInfer*. ASPLOS 2024. Cai et al. *Medusa*. ICML 2024.
 9. Fu et al. *Break the Sequential Dependency of LLM Inference Using Lookahead Decoding*. ICML 2024.
-10. *An Empirical Study of Speculative Decoding on Software Engineering Tasks*. arXiv:2604.26469, 2026.
-11. *QiMeng-PRepair: Precise Code Repair via Edit-Aware Reward Optimization*. arXiv:2604.05963, 2026.
+10. Li, Chen, Hu, Xia. *An Empirical Study of Speculative Decoding on Software Engineering Tasks*. arXiv:2604.26469, 2026.
+11. Ke et al. *QiMeng-PRepair: Precise Code Repair via Edit-Aware Reward Optimization*. arXiv:2604.05963, 2026.
 12. Cursor. *Editing Files at 1000 Tokens per Second* (blog), 2024.
 13. Kortix. *FastApply-1.5B-v1.0* (model) and *FastApply-dataset-v1.0* (dataset), Hugging Face, Apache-2.0.
 14. Snowflake. *Arctic Inference* (github.com/snowflakedb/ArcticInference), v0.3.0, Apache-2.0.

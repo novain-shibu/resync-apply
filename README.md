@@ -8,8 +8,9 @@ that scores any drafter with the exact pass count of a real GPU run, in seconds.
 On 199 real fast-apply edits (Kortix/FastApply-1.5B, Kortix FastApply dataset), the drafter needs ~1.27x fewer
 verification passes than tuned SuffixDecoding (Snowflake Arctic Inference, the open method built into vLLM).
 On the 169 edits never used for tuning: 1.26-1.28x (bootstrap 95% CI 1.19-1.36).
-On a free Kaggle T4 in a Hugging Face loop: 1.05x faster than SuffixDecoding (56.8 s vs 59.9 s, 30 edits),
-and about 37x faster than normal decoding on the first 5 edits (342.8 s -> 9.2 s). Output matched greedy decoding on
+On a free Kaggle T4 in a Hugging Face loop the fewer passes did NOT become a clear speed-up: 1.05x on the 30 tuning
+edits and 1.00x (a tie) on 29 held-out edits, because our tree passes check more tokens. Both methods are 24-37x
+faster than normal decoding (first 5 edits of each run). Output matched greedy decoding on
 every edit compared (see REPORT section 6.4).
 
 ## How it works (short)
@@ -27,7 +28,7 @@ After a mismatch, most of the cost of copy drafting is finding where to copy fro
 python reproduce.py
 ```
 Expected: drafter 3,978 passes (all 199 edits) / 664 (first 30); copy-oracle ceiling 2,118 / 374;
-GPU-run configuration 644 passes (same as the GPU).
+GPU-run configuration 644 passes (same as the GPU); `python sim/heldout_split.py` prints all splits with CIs.
 `python sim/hybrid.py` predicts T4 wall-clock from the measured cost curve (tree: 662 passes, 69.5 s predicted,
 70.5 s measured).
 
@@ -41,7 +42,8 @@ GPU-run configuration 644 passes (same as the GPU).
 
 ## Limits
 
-Batch size 1 only; the tree verifies 2.3 drafted tokens per output token, so heavy batching may cancel the gain.
+No wall-clock gain on held-out edits on a T4. Batch size 1 only; the tree verifies 2.3 drafted tokens per output token
+(SuffixDecoding 1.48), so heavy batching may cancel the pass gain.
 Not measured on A100/H100 or inside vLLM. Greedy decoding only. "Matched greedy on every edit compared" is not a proof of
 bit-identical output (rare fp16 near-ties exist for every method).
 
