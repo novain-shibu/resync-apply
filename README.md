@@ -1,6 +1,10 @@
 # resync-apply
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23393220.svg)](https://doi.org/10.5281/zenodo.23393220)
+[![Report PDF](https://img.shields.io/badge/Report-Download_PDF-B31B1B?logo=adobeacrobatreader&logoColor=white)](https://github.com/novain-shibu/resync-apply/raw/main/REPORT.pdf)
+
+**📄 Full report with all results:** [download PDF](https://github.com/novain-shibu/resync-apply/raw/main/REPORT.pdf) ·
+[read in the browser](REPORT.pdf) · [text version](REPORT.md) · [archived copy (Zenodo)](https://doi.org/10.5281/zenodo.23393220)
 
 A lossless copy drafter for code "fast apply" (a model rewrites a whole file after an edit), plus a laptop simulator
 that scores any drafter with the exact pass count of a real GPU run, in seconds.
