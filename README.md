@@ -15,7 +15,7 @@ every edit compared (see REPORT section 6.4).
 ## How it works (short)
 
 After a mismatch, most of the cost of copy drafting is finding where to copy from next. Each pass verifies up to
-8 branches as one token tree:
+15 branches (7.4 per pass on average) as one token tree:
 - **resync**: assume the model replaced, inserted or skipped one source token, and keep copying from there
 - **1-token anchors**, ranked nearest after the previous copy position, plus longer n-gram anchors (n = 32..2)
 - **read frontiers** in the original code and in the edit snippet
@@ -26,7 +26,8 @@ After a mismatch, most of the cost of copy drafting is finding where to copy fro
 ```
 python reproduce.py
 ```
-Expected: drafter 3,978 passes (all 199 edits) / 664 (first 30); copy-oracle ceiling 2,118 / 374.
+Expected: drafter 3,978 passes (all 199 edits) / 664 (first 30); copy-oracle ceiling 2,118 / 374;
+GPU-run configuration 644 passes (same as the GPU).
 `python sim/hybrid.py` predicts T4 wall-clock from the measured cost curve (tree: 662 passes, 69.5 s predicted,
 70.5 s measured).
 
@@ -40,8 +41,8 @@ Expected: drafter 3,978 passes (all 199 edits) / 664 (first 30); copy-oracle cei
 
 ## Limits
 
-Batch size 1 only; the tree verifies ~6.6x more tokens per pass, so heavy batching may cancel the gain.
-Not measured on A100/H100 or inside vLLM. Greedy decoding only. "Matched greedy on all N tested" is not a proof of
+Batch size 1 only; the tree verifies 2.3 drafted tokens per output token, so heavy batching may cancel the gain.
+Not measured on A100/H100 or inside vLLM. Greedy decoding only. "Matched greedy on every edit compared" is not a proof of
 bit-identical output (rare fp16 near-ties exist for every method).
 
 ## Cite
