@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as below."
+title: "Resync-and-Anchor Copy Drafting for Lossless Code Fast-Apply"
+type: software
+authors:
+  - family-names: Shibu
+    given-names: Novain
+license: Apache-2.0
+date-released: 2026-10-16
+version: "1.0.0"
+keywords: [speculative decoding, code editing, fast apply, LLM inference]
